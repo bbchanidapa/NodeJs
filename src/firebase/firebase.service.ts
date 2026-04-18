@@ -11,11 +11,12 @@ export class FirebaseService implements OnModuleInit {
 
   onModuleInit() {
     const databaseURL =
-      this.config.get<string>('FIREBASE_DATABASE_URL') ??
-      this.databaseUrlFromFirebaseConfig();
+      this.nonEmpty(this.config.get<string>('FIREBASE_DATABASE_URL')) ??
+      this.databaseUrlFromFirebaseConfig() ??
+      this.defaultRealtimeDatabaseUrlFromProjectId();
     if (!databaseURL) {
       throw new Error(
-        'FIREBASE_DATABASE_URL is not set. Copy .env.example to .env, or deploy on Firebase so FIREBASE_CONFIG includes databaseURL.',
+        'Set FIREBASE_DATABASE_URL in .env (see .env.example), or FIREBASE_PROJECT_ID for the default *-default-rtdb.firebaseio.com URL, or deploy with FIREBASE_CONFIG containing projectId.',
       );
     }
 
@@ -34,17 +35,37 @@ export class FirebaseService implements OnModuleInit {
     this.logger.log('Firebase Admin initialized');
   }
 
-  private databaseUrlFromFirebaseConfig(): string | undefined {
+  private nonEmpty(value: string | undefined): string | undefined {
+    return value && value.trim().length > 0 ? value.trim() : undefined;
+  }
+
+  private parsedFirebaseConfig():
+    | { projectId?: string; databaseURL?: string }
+    | undefined {
     const raw = process.env.FIREBASE_CONFIG;
     if (!raw) {
       return undefined;
     }
     try {
-      const cfg = JSON.parse(raw) as { databaseURL?: string };
-      return cfg.databaseURL;
+      return JSON.parse(raw) as { projectId?: string; databaseURL?: string };
     } catch {
       return undefined;
     }
+  }
+
+  private databaseUrlFromFirebaseConfig(): string | undefined {
+    return this.parsedFirebaseConfig()?.databaseURL;
+  }
+
+  /** Default RTDB hostname; override with FIREBASE_DATABASE_URL if you use a regional *.firebasedatabase.app URL. */
+  private defaultRealtimeDatabaseUrlFromProjectId(): string | undefined {
+    const projectId =
+      this.nonEmpty(this.config.get<string>('FIREBASE_PROJECT_ID')) ??
+      this.nonEmpty(this.parsedFirebaseConfig()?.projectId);
+    if (!projectId) {
+      return undefined;
+    }
+    return `https://${projectId}-default-rtdb.firebaseio.com`;
   }
 
   private resolveCredential(): admin.credential.Credential {
