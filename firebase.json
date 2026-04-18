@@ -1,0 +1,27 @@
+{
+  "functions": [
+    {
+      "source": ".",
+      "codebase": "default",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "src",
+        "test",
+        "coverage",
+        "*.md",
+        ".env",
+        ".env.*",
+        "Dockerfile",
+        "render.yaml",
+        "nest-cli.json",
+        "eslint.config.mjs",
+        ".prettierrc",
+        ".dockerignore"
+      ],
+      "predeploy": ["npm run build"]
+    }
+  ]
+}
