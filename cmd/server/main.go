@@ -13,7 +13,7 @@ func hello(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	fmt.Fprint(w, "Hello World!11")
+	fmt.Print(w, "Hello World!11")
 }
 
 // ตรวจว่าเซิร์ฟเวอร์ยังรันอยู่ — ใช้กับ health check ของ Docker / Render
