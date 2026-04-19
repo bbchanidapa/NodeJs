@@ -1,28 +1,23 @@
 # syntax=docker/dockerfile:1
 
-FROM node:22-bookworm-slim AS builder
+FROM golang:1.22-bookworm AS builder
 
 WORKDIR /app
 
-COPY package.json package-lock.json ./
-RUN npm ci
+COPY go.mod ./
+RUN go mod download
 
 COPY . .
-RUN npm run build
+RUN CGO_ENABLED=0 GOOS=linux go build -o /server ./cmd/server
 
-FROM node:22-bookworm-slim AS runner
+FROM gcr.io/distroless/static-debian12:nonroot
 
-WORKDIR /app
+WORKDIR /
 
-ENV NODE_ENV=production
+COPY --from=builder /server /server
 
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev && npm cache clean --force
-
-COPY --from=builder /app/dist ./dist
-
-USER node
+USER nonroot:nonroot
 
 EXPOSE 3000
 
-CMD ["node", "dist/main.js"]
+ENTRYPOINT ["/server"]

@@ -1,12 +1,9 @@
-node_modules
-dist
-coverage
 .git
 .env
 .env.*
 !.env.example
+README.md
 *.md
-test
-.vscode
 .idea
-npm-debug.log
+.vscode
+coverage
