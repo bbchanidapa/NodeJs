@@ -1,52 +1,42 @@
 package main
 
 import (
-	"encoding/json"
-	"log"
+	"fmt"
 	"net/http"
 	"os"
 )
 
-func newMux() http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		if err := json.NewEncoder(w).Encode(map[string]string{"status": "ok"}); err != nil {
-			log.Printf("encode: %v", err)
-		}
-	})
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
-			return
-		}
-		if r.URL.Path != "/" {
-			http.NotFound(w, r)
-			return
-		}
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		if _, err := w.Write([]byte("Hello World!")); err != nil {
-			log.Printf("write: %v", err)
-		}
-	})
-	return mux
+// หน้าแรก — ส่งข้อความ Hello World! กลับไปที่เบราว์เซอร์
+func hello(w http.ResponseWriter, r *http.Request) {
+	// ถ้าไม่ใช่ path / จริงๆ (เช่น /foo) ให้ตอบ 404
+	if r.URL.Path != "/" {
+		http.NotFound(w, r)
+		return
+	}
+	fmt.Fprint(w, "Hello World!")
+}
+
+// ตรวจว่าเซิร์ฟเวอร์ยังรันอยู่ — ใช้กับ health check ของ Docker / Render
+func health(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	fmt.Fprint(w, `{"status":"ok"}`)
 }
 
 func main() {
-	addr := ":" + port()
-	log.Printf("listening on %s", addr)
-	if err := http.ListenAndServe(addr, newMux()); err != nil {
-		log.Fatal(err)
-	}
-}
+	// ลงทะเบียน URL กับฟังก์ชันที่จะรัน
+	// ลงทะเบียน /health ก่อน / เพื่อไม่ให้ / ไปดักทุก path
+	http.HandleFunc("/health", health)
+	http.HandleFunc("/", hello)
 
-func port() string {
-	if p := os.Getenv("PORT"); p != "" {
-		return p
+	// พอร์ต: อ่านจากตัวแปรสภาพแวดล้อม PORT ถ้าไม่มีใช้ 3000
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "3000"
 	}
-	return "3000"
+
+	fmt.Println("เปิดเซิร์ฟเวอร์ที่พอร์ต", port)
+	err := http.ListenAndServe(":"+port, nil)
+	if err != nil {
+		fmt.Println("error:", err)
+	}
 }

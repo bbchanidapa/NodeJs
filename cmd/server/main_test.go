@@ -3,41 +3,32 @@ package main
 import (
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 )
 
-func TestRoot(t *testing.T) {
-	srv := httptest.NewServer(newMux())
-	t.Cleanup(srv.Close)
+func TestHello(t *testing.T) {
+	// จำลอง request เข้ามาที่ path /
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	// เก็บคำตอบไว้ในตัวแปร rr
+	rr := httptest.NewRecorder()
 
-	res, err := http.Get(srv.URL + "/")
-	if err != nil {
-		t.Fatal(err)
+	hello(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("อยากได้ status 200 แต่ได้ %d", rr.Code)
 	}
-	defer res.Body.Close()
-	if res.StatusCode != http.StatusOK {
-		t.Fatalf("status %d", res.StatusCode)
-	}
-	var b strings.Builder
-	if _, err := b.ReadFrom(res.Body); err != nil {
-		t.Fatal(err)
-	}
-	if got := b.String(); got != "Hello World!" {
-		t.Fatalf("body %q", got)
+	if rr.Body.String() != "Hello World!" {
+		t.Errorf("อยากได้ Hello World! แต่ได้ %q", rr.Body.String())
 	}
 }
 
 func TestHealth(t *testing.T) {
-	srv := httptest.NewServer(newMux())
-	t.Cleanup(srv.Close)
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	rr := httptest.NewRecorder()
 
-	res, err := http.Get(srv.URL + "/health")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer res.Body.Close()
-	if res.StatusCode != http.StatusOK {
-		t.Fatalf("status %d", res.StatusCode)
+	health(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("อยากได้ status 200 แต่ได้ %d", rr.Code)
 	}
 }
