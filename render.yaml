@@ -1,4 +1,4 @@
-# Blueprint for https://render.com — set FIREBASE_* secrets in the dashboard.
+# Blueprint for https://render.com
 services:
   - type: web
     name: nest-api
@@ -8,7 +8,3 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      - key: FIREBASE_DATABASE_URL
-        sync: false
-      - key: FIREBASE_SERVICE_ACCOUNT_JSON
-        sync: false

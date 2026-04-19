@@ -29,10 +29,5 @@ Thumbs.db
 # Test
 coverage/
 
-# Firebase
-.firebase/
-firebase-debug.log
-firebase-debug.*.log
-
 # ESLint / cache
 .eslintcache

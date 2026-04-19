@@ -3,7 +3,6 @@ import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
-import { FirebaseService } from './../src/firebase/firebase.service';
 
 describe('AppController (e2e)', () => {
   let app: INestApplication<App>;
@@ -11,18 +10,7 @@ describe('AppController (e2e)', () => {
   beforeEach(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    })
-      .overrideProvider(FirebaseService)
-      .useValue({
-        onModuleInit: () => undefined,
-        getApp: () => {
-          throw new Error('Firebase is not initialized in e2e');
-        },
-        getDatabase: () => {
-          throw new Error('Firebase is not initialized in e2e');
-        },
-      })
-      .compile();
+    }).compile();
 
     app = moduleFixture.createNestApplication();
     await app.init();
