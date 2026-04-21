@@ -1,0 +1,12 @@
+{
+  "name": "nodejs-go-api",
+  "private": true,
+  "scripts": {
+    "start": "nodemon",
+    "dev": "nodemon",
+    "go": "go run ./cmd/server"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9"
+  }
+}
