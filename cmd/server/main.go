@@ -14,9 +14,9 @@ import (
 	_ "github.com/lib/pq"
 )
 
-// หน้าแรก — ส่งข้อความ Hello World! กลับไปที่เบราว์เซอร์
+// ===== Basic handlers =====
+
 func hello(w http.ResponseWriter, r *http.Request) {
-	// ถ้าไม่ใช่ path / จริงๆ (เช่น /foo) ให้ตอบ 404
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
 		return
@@ -24,18 +24,18 @@ func hello(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, "Hello World!")
 }
 
-// สร้าง UUID ใหม่ทุกครั้งที่เรียก (รูปแบบ v4 แบบสุ่ม)
 func newUUID(w http.ResponseWriter, r *http.Request) {
 	id := uuid.New()
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	fmt.Fprint(w, id.String())
 }
 
-// ตรวจว่าเซิร์ฟเวอร์ยังรันอยู่ — ใช้กับ health check ของ Docker / Render
 func health(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	fmt.Fprint(w, `{"status":"ok"}`)
 }
+
+// ===== Request / Response models =====
 
 type createUserRequest struct {
 	ID        string `json:"id"`
@@ -54,51 +54,54 @@ type userRecord struct {
 	Lastname  string `json:"lastname"`
 }
 
+// ===== Database setup =====
+
 func nonEmpty(v string) string {
-	if strings.TrimSpace(v) == "" {
-		return ""
-	}
 	return strings.TrimSpace(v)
 }
 
-func initPostgres(ctx context.Context) (*sql.DB, error) {
-	dsn := nonEmpty(os.Getenv("DATABASE_URL"))
-	if dsn == "" {
-		host := nonEmpty(os.Getenv("PGHOST"))
-		if host == "" {
-			host = "localhost"
-		}
-		port := nonEmpty(os.Getenv("PGPORT"))
-		if port == "" {
-			port = "5432"
-		}
-		user := nonEmpty(os.Getenv("PGUSER"))
-		if user == "" {
-			user = "postgres"
-		}
-		dbName := nonEmpty(os.Getenv("PGDATABASE"))
-		if dbName == "" {
-			dbName = "postgres"
-		}
-		sslMode := nonEmpty(os.Getenv("PGSSLMODE"))
-		if sslMode == "" {
-			sslMode = "disable"
-		}
-		password := nonEmpty(os.Getenv("PGPASSWORD"))
-
-		parts := []string{
-			"host=" + host,
-			"port=" + port,
-			"user=" + user,
-			"dbname=" + dbName,
-			"sslmode=" + sslMode,
-		}
-		if password != "" {
-			parts = append(parts, "password="+password)
-		}
-		dsn = strings.Join(parts, " ")
+func postgresDSNFromEnv() string {
+	if dsn := nonEmpty(os.Getenv("DATABASE_URL")); dsn != "" {
+		return dsn
 	}
 
+	host := nonEmpty(os.Getenv("PGHOST"))
+	if host == "" {
+		host = "localhost"
+	}
+	port := nonEmpty(os.Getenv("PGPORT"))
+	if port == "" {
+		port = "5432"
+	}
+	user := nonEmpty(os.Getenv("PGUSER"))
+	if user == "" {
+		user = "postgres"
+	}
+	dbName := nonEmpty(os.Getenv("PGDATABASE"))
+	if dbName == "" {
+		dbName = "postgres"
+	}
+	sslMode := nonEmpty(os.Getenv("PGSSLMODE"))
+	if sslMode == "" {
+		sslMode = "disable"
+	}
+	password := nonEmpty(os.Getenv("PGPASSWORD"))
+
+	parts := []string{
+		"host=" + host,
+		"port=" + port,
+		"user=" + user,
+		"dbname=" + dbName,
+		"sslmode=" + sslMode,
+	}
+	if password != "" {
+		parts = append(parts, "password="+password)
+	}
+	return strings.Join(parts, " ")
+}
+
+func initPostgres(ctx context.Context) (*sql.DB, error) {
+	dsn := postgresDSNFromEnv()
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
 		return nil, err
@@ -137,6 +140,8 @@ func ensureUsersTable(ctx context.Context, db *sql.DB) error {
 	`)
 	return err
 }
+
+// ===== Utility =====
 
 func listUsersHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -182,17 +187,19 @@ func listUsersHandler(db *sql.DB) http.HandlerFunc {
 	}
 }
 
-func extractUserID(path string) (string, error) {
+func extractUserID(path string) (string, bool, bool) {
 	id := strings.TrimPrefix(path, "/users/")
 	id = strings.TrimSpace(id)
 	if id == "" || strings.Contains(id, "/") {
-		return "", fmt.Errorf("not found")
+		return "", false, false
 	}
 	if _, err := uuid.Parse(id); err != nil {
-		return "", fmt.Errorf("invalid uuid")
+		return "", false, true
 	}
-	return id, nil
+	return id, true, true
 }
+
+// ===== GET /users/:id =====
 
 func getUserByIDHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -205,12 +212,12 @@ func getUserByIDHandler(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		id, err := extractUserID(r.URL.Path)
-		if err != nil && err.Error() == "not found" {
+		id, found, valid := extractUserID(r.URL.Path)
+		if !found {
 			http.NotFound(w, r)
 			return
 		}
-		if err != nil {
+		if !valid {
 			http.Error(w, "id must be a valid uuid", http.StatusBadRequest)
 			return
 		}
@@ -219,7 +226,7 @@ func getUserByIDHandler(db *sql.DB) http.HandlerFunc {
 		defer cancel()
 
 		var u userRecord
-		err = db.QueryRowContext(
+		err := db.QueryRowContext(
 			ctx,
 			`SELECT id, firstname, lastname FROM users WHERE id = $1`,
 			id,
@@ -241,7 +248,8 @@ func getUserByIDHandler(db *sql.DB) http.HandlerFunc {
 	}
 }
 
-// PUT /users/:id (full update), PATCH /users/:id (partial update)
+// ===== PUT/PATCH /users/:id =====
+
 func updateUserByIDHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPut && r.Method != http.MethodPatch {
@@ -253,12 +261,12 @@ func updateUserByIDHandler(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		id, err := extractUserID(r.URL.Path)
-		if err != nil && err.Error() == "not found" {
+		id, found, valid := extractUserID(r.URL.Path)
+		if !found {
 			http.NotFound(w, r)
 			return
 		}
-		if err != nil {
+		if !valid {
 			http.Error(w, "id must be a valid uuid", http.StatusBadRequest)
 			return
 		}
@@ -306,7 +314,7 @@ func updateUserByIDHandler(db *sql.DB) http.HandlerFunc {
 		defer cancel()
 
 		var updated userRecord
-		err = db.QueryRowContext(
+		err := db.QueryRowContext(
 			ctx,
 			`UPDATE users
 			 SET firstname = COALESCE($2, firstname),
@@ -332,7 +340,8 @@ func updateUserByIDHandler(db *sql.DB) http.HandlerFunc {
 	}
 }
 
-// POST /users - สร้าง user ลง PostgreSQL ที่ table users
+// ===== POST /users =====
+
 func createUserHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -358,7 +367,8 @@ func createUserHandler(db *sql.DB) http.HandlerFunc {
 		defer cancel()
 
 		var userID string
-		if strings.TrimSpace(req.ID) == "" {
+		idFromRequest := strings.TrimSpace(req.ID)
+		if idFromRequest == "" {
 			err := db.QueryRowContext(
 				ctx,
 				`INSERT INTO users (firstname, lastname) VALUES ($1, $2) RETURNING id`,
@@ -369,7 +379,7 @@ func createUserHandler(db *sql.DB) http.HandlerFunc {
 				return
 			}
 		} else {
-			if _, err := uuid.Parse(req.ID); err != nil {
+			if _, err := uuid.Parse(idFromRequest); err != nil {
 				http.Error(w, "id must be a valid uuid", http.StatusBadRequest)
 				return
 			}
@@ -377,7 +387,7 @@ func createUserHandler(db *sql.DB) http.HandlerFunc {
 			err := db.QueryRowContext(
 				ctx,
 				`INSERT INTO users (id, firstname, lastname) VALUES ($1, $2, $3) RETURNING id`,
-				req.ID, req.Firstname, req.Lastname,
+				idFromRequest, req.Firstname, req.Lastname,
 			).Scan(&userID)
 			if err != nil {
 				if strings.Contains(strings.ToLower(err.Error()), "duplicate key") {
@@ -401,6 +411,8 @@ func createUserHandler(db *sql.DB) http.HandlerFunc {
 		})
 	}
 }
+
+// ===== Routers =====
 
 func userByIDHandler(db *sql.DB) http.HandlerFunc {
 	getByID := getUserByIDHandler(db)
@@ -438,6 +450,8 @@ func usersHandler(db *sql.DB) http.HandlerFunc {
 	}
 }
 
+// ===== main =====
+
 func main() {
 	db, err := initPostgres(context.Background())
 	if err != nil {
@@ -446,7 +460,6 @@ func main() {
 		defer db.Close()
 	}
 
-	// ลงทะเบียน path เฉพาะก่อน path / เสมอ
 	http.HandleFunc("/health", health)
 	http.HandleFunc("/uuid", newUUID)
 	http.HandleFunc("/users", usersHandler(db))
